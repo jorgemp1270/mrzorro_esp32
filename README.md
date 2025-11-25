@@ -108,3 +108,6 @@ El ESP32 espera un servidor backend con los siguientes endpoints:
 *   `POST /audio`: Recibe fragmentos de audio (octet-stream). Encabezados: `X-Chunk-Number`, `X-Last-Chunk`, `X-User-Id`.
 *   `GET /get_response/{filename}`: Devuelve el archivo de audio WAV generado.
 
+----
+
+Desarrollado con ♥️ usando PlatformIO y Arduino IDE
