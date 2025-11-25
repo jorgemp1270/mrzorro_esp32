@@ -1,0 +1,134 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+
+// UUIDs must match the Flutter app
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
+// TODO: Replace with your network credentials
+//REEMPLAZA CON TUS CREDENCIALES DE WIFI
+const char *ssid = "SSID_HERE";
+const char *password = "PASSWORD_HERE";
+
+// TODO: Replace with your backend URL
+//REEMPLAZA CON LA IP DEL SERVIDOR CORRIENDO EL BACKEND
+const char *serverUrl = "http://IP:8000/prompt";
+
+String currentPrompt = "Hola, ¿cómo estás?";
+bool deviceConnected = false;
+String receivedUserId = "";
+
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println("Device connected");
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println("Device disconnected");
+      // Restart advertising
+      pServer->getAdvertising()->start();
+    }
+};
+
+class MyCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      std::string value = pCharacteristic->getValue();
+      if (value.length() > 0) {
+        receivedUserId = "";
+        for (int i = 0; i < value.length(); i++){
+          receivedUserId += value[i];
+        }
+        Serial.print("Received UserId via BLE: ");
+        Serial.println(receivedUserId);
+      }
+    }
+};
+
+void setup() {
+  Serial.begin(9600);
+
+  // Connect to WiFi
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+  Serial.println(WiFi.localIP());
+
+  // Initialize BLE
+  BLEDevice::init("ESP32_MrZorro");
+  BLEServer *pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+
+  BLECharacteristic *pCharacteristic = pService->createCharacteristic(
+                                         CHARACTERISTIC_UUID,
+                                         BLECharacteristic::PROPERTY_READ |
+                                         BLECharacteristic::PROPERTY_WRITE
+                                       );
+
+  pCharacteristic->setCallbacks(new MyCallbacks());
+  pCharacteristic->setValue("Waiting for UserID...");
+
+  pService->start();
+
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);
+  pAdvertising->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+
+  Serial.println("BLE Ready! Waiting for connection...");
+}
+
+void loop() {
+  // Process the received User ID if available
+  if (receivedUserId.length() > 0) {
+      if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        Serial.println("Sending request to backend...");
+        http.begin(serverUrl);
+        http.addHeader("Content-Type", "application/json");
+
+        StaticJsonDocument<512> doc;
+        doc["user"] = receivedUserId;
+        doc["prompt"] = currentPrompt;
+
+        String requestBody;
+        serializeJson(doc, requestBody);
+
+        int httpResponseCode = http.POST(requestBody);
+
+        if (httpResponseCode > 0) {
+          String response = http.getString();
+          Serial.print("HTTP Response code: ");
+          Serial.println(httpResponseCode);
+          Serial.println("Backend Response:");
+          Serial.println(response);
+        } else {
+          Serial.print("Error on sending POST: ");
+          Serial.println(httpResponseCode);
+        }
+        http.end();
+      } else {
+        Serial.println("Error: WiFi Disconnected");
+      }
+
+      // Clear the ID so we don't send it again repeatedly
+      receivedUserId = "";
+  }
+
+  delay(100);
+}
