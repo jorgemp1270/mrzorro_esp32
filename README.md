@@ -1,6 +1,19 @@
-# 🦊 Mr. Zorro - Asistente de Voz ESP32
+# 🦊 Mr. Zorro - Asistente de Voz ESP32 (Dual Core Architecture)
 
-Este proyecto implementa un asistente de voz en un microcontrolador ESP32. Se integra con una aplicación móvil a través de Bluetooth Low Energy (BLE) para la autenticación del usuario y se comunica con un backend en Python (FastAPI) para el procesamiento de voz y respuestas de IA.
+Este proyecto implementa un asistente de voz utilizando **dos microcontroladores ESP32** trabajando en conjunto para superar problemas de latencia de red.
+
+*   **ESP32 A (Capturador):** Se encarga exclusivamente de grabar audio de alta calidad y enviarlo al procesador.
+*   **ESP32 B (Procesador):** Recibe el audio, lo almacena en una tarjeta SD, lo envía al backend para procesamiento y reproduce la respuesta.
+
+Se integra con una aplicación móvil a través de Bluetooth Low Energy (BLE) para la configuración y autenticación.
+
+## 🪁 Demostración
+
+<div align="center">
+  <video src=".resources/videos/demo.mp4" width="80%" controls></video>
+  <br>
+  <a href=".resources/videos/demo.mp4">Ver video de demostración</a>
+</div>
 
 ## 📄 Documentación del proyecto
 
@@ -8,98 +21,122 @@ Este proyecto implementa un asistente de voz en un microcontrolador ESP32. Se in
 
 ## 🔗 Repositorios
 
-Este proyecto es parte de un ecosistema más grande. Revisa los otros repositorios de sus componentes:
-
+Este proyecto es parte de un ecosistema más grande:
 - **Flutter APP**: [mrzorro_app](https://github.com/jorgemp1270/mrzorro_app)
 - **Backend API**: [mrzorro_api](https://github.com/jorgemp1270/mrzorro_api)
 
-## Características
+## Arquitectura del Sistema
 
-<p align="center">
-  <img src=".resources/img/esp32.png" width="40%" />
-</p>
+Debido a la latencia de la red, el sistema se divide en dos módulos conectados por UART de alta velocidad:
 
-*   **Emparejamiento BLE:** Se conecta a una aplicación móvil para recibir un ID de usuario de forma segura.
-*   **Grabación de Voz:** Captura audio utilizando un micrófono I2S (INMP441).
-*   **Transmisión de Audio:** Envía datos de audio en fragmentos a un servidor backend a través de HTTP POST.
-*   **Reproducción de Audio:** Descarga y reproduce respuestas de audio WAV generadas por el backend utilizando un amplificador I2S (MAX98357A).
-*   **Indicación de Estado:** Utiliza el LED incorporado para indicar el estado de grabación.
+1.  **Módulo de Captura (ESP32 A):**
+    *   Lee datos del micrófono I2S (INMP441).
+    *   Envía el audio en tiempo real vía UART al ESP32 B.
+    *   Gestiona el botón de grabación y el LED de estado.
+
+2.  **Módulo de Procesamiento (ESP32 B):**
+    *   Recibe el audio por UART y lo guarda en una **Tarjeta SD**.
+    *   Se conecta a WiFi y gestiona la comunicación BLE con la App.
+    *   Sube el archivo de audio al servidor Backend.
+    *   Descarga la respuesta y la reproduce por el altavoz I2S (MAX98357A).
 
 ## Requisitos de Hardware
 
-*   **Microcontrolador:** Placa de desarrollo ESP32 (por ejemplo, ESP32 DOIT DEVKIT V1)
-*   **Micrófono:** INMP441 (Interfaz I2S)
-*   **Amplificador:** MAX98357A (Interfaz I2S)
-*   **Altavoz:** Altavoz de 4Ω u 8Ω
-*   **Entrada:** Botón pulsador
-*   **Fuente de Alimentación:** 5V USB o Batería
+### ESP32 A (Capturador - NodeMCU-32S)
+*   **Microcontrolador:** ESP32 NodeMCU-32S
+*   **Micrófono:** INMP441 (I2S)
+*   **Botón:** Pulsador
+*   **LED:** Indicador de estado
 
-## Esquema y Configuración de Pines
+### ESP32 B (Procesador - LilyGo T-SIM7000G o similar)
+*   **Microcontrolador:** ESP32 (LilyGo T-SIM7000G usado en este ejemplo)
+*   **Almacenamiento:** Módulo MicroSD
+*   **Audio:** Amplificador MAX98357A + Altavoz
+*   **Conectividad:** WiFi + BLE
 
-<p align="center">
-  <img src=".resources/img/esquema.png" width="100%" />
-</p>
+## Conexiones y Pines
 
-| Componente | Nombre del Pin | GPIO ESP32 | Descripción |
-| :--- | :--- | :--- | :--- |
-| **INMP441** | SCK | 18 | Reloj Serial |
-| (Micrófono) | WS | 19 | Selección de Palabra |
-| | SD | 5 | Datos Seriales |
-| | VDD | 3.3V | Alimentación |
-| | GND | GND | Tierra |
-| | L/R | GND | Selección de Canal Izquierdo |
-| **MAX98357A** | BCLK | 22 | Reloj de Bit |
-| (Altavoz) | LRC | 23 | Reloj Izquierda/Derecha |
-| | DIN | 21 | Entrada de Datos |
-| | VIN | 5V | Alimentación |
-| | GND | GND | Tierra |
-| **Botón** | Pin 1 | 12 | Entrada (Pull-up) |
-| | Pin 2 | GND | Tierra |
-| **LED** | Ánodo | 2 | LED Incorporado (Estado) |
+### 1. Conexión entre ESP32 A y ESP32 B (UART)
+Para comunicar los dos microcontroladores, conecta sus pines UART cruzados y comparte la tierra (GND).
 
-## Dependencias de Software
+| ESP32 A (Capturador) | ESP32 B (Procesador) | Función |
+| :--- | :--- | :--- |
+| GPIO 17 (TX) | GPIO 27 (RX) | Envío de Audio |
+| GPIO 16 (RX) | GPIO 26 (TX) | (Opcional) Retorno |
+| GND | GND | **IMPORTANTE: Tierra común** |
 
-Este proyecto está construido utilizando **PlatformIO** con el **Framework Arduino**.
+### 2. Pines ESP32 A (Capturador)
 
-**Librerías Requeridas:**
-*   `WiFi` (Integrada)
-*   `HTTPClient` (Integrada)
-*   `BLEDevice` / `ESP32 BLE Arduino` (Integrada)
-*   `ArduinoJson` (por Benoit Blanchon)
+| Componente | Pin | GPIO |
+| :--- | :--- | :--- |
+| **INMP441** | SCK | 26 |
+| | WS | 25 |
+| | SD | 33 |
+| **Botón** | Pin 1 | 27 |
+| **LED** | Ánodo | 2 |
 
-## Instalación
+### 3. Pines ESP32 B (Procesador)
 
-1.  **Instalar VS Code:** Descarga e instala Visual Studio Code.
-2.  **Instalar PlatformIO:** Instala la extensión "PlatformIO IDE" desde el marketplace de VS Code.
-3.  **Clonar Repositorio:** Clona este repositorio en tu máquina local.
-4.  **Abrir Proyecto:** Abre la carpeta del proyecto en VS Code. PlatformIO detectará el archivo `platformio.ini` y descargará automáticamente las dependencias necesarias.
+| Componente | Pin | GPIO |
+| :--- | :--- | :--- |
+| **MAX98357A** | BCLK | 22 |
+| | LRC | 4 |
+| | DIN | 21 |
+| **MicroSD** | MISO | 2 |
+| | MOSI | 15 |
+| | SCK | 14 |
+| | CS | 13 |
+| **LED** | Ánodo | 12 |
 
-## Configuración
+## Instalación y Flasheo
 
-Antes de subir el código, actualiza las siguientes constantes en `src/main.cpp`:
+Este proyecto contiene el código para **ambos** microcontroladores en la misma carpeta `src`. Debes seleccionar cuál firmware compilar antes de subirlo.
 
-```cpp
-// Credenciales WiFi
-const char *ssid = "TU_SSID_WIFI";
-const char *password = "TU_CONTRASEÑA_WIFI";
+1.  **Abrir `src/main.cpp`**.
+2.  **Seleccionar el Firmware:** Descomenta la línea correspondiente al dispositivo que vas a programar y comenta la otra.
 
-// Configuración del Backend
-const char *serverIP = "TU_IP_BACKEND"; // ej., 192.168.1.X
-const int serverPort = 8000;
-```
+    **Para programar el ESP32 A (Capturador):**
+    ```cpp
+    #define FIRMWARE_A_CAPTURE
+    // #define FIRMWARE_B_PROCESSOR
+    ```
+
+    **Para programar el ESP32 B (Procesador):**
+    ```cpp
+    // #define FIRMWARE_A_CAPTURE
+    #define FIRMWARE_B_PROCESSOR
+    ```
+
+3.  **Subir:** Conecta el ESP32 correspondiente y dale al botón de "Upload" en PlatformIO.
+4.  **Repetir:** Cambia la selección en `src/main.cpp` y repite el proceso para el otro ESP32.
 
 ## Uso
 
-1.  **Subir Firmware:** Conecta el ESP32 a tu PC y sube el código usando PlatformIO (botón de flecha "Upload").
-2.  **Encender:** El ESP32 se inicializará y esperará una conexión BLE.
-3.  **Conectar App:** Abre la aplicación complementaria Flutter y conéctate al dispositivo Bluetooth llamado **"ESP32_MrZorro"**.
-4.  **Autenticar:** La aplicación envía el `userId` al ESP32.
-5.  **Grabar Comando:**
-    *   **Mantén presionado** el botón (GPIO 12) para comenzar a grabar. El LED se encenderá.
-    *   Habla tu comando claramente.
-    *   **Suelta** el botón para detener la grabación. El LED se apagará.
-6.  **Procesamiento:** El ESP32 envía el audio al servidor.
-7.  **Respuesta:** Una vez procesado, el ESP32 descargará y reproducirá la respuesta de la IA a través del altavoz.
+1.  **Encender:** Alimenta ambos ESP32. Asegúrate de que estén conectados por UART y GND.
+2.  **Configurar (Solo ESP32 B):**
+    *   Abre la App móvil y conéctate por Bluetooth a **"Mr. Zorro"**.
+    *   La App enviará las credenciales WiFi y el UserID.
+    *   El ESP32 B se conectará al WiFi y quedará listo (LED parpadea o indica listo).
+3.  **Grabar:**
+    *   Mantén presionado el botón en el **ESP32 A**.
+    *   El LED del ESP32 A se encenderá. Habla claramente.
+    *   El audio se transmite en tiempo real al ESP32 B y se guarda en la SD.
+4.  **Procesar:**
+    *   Suelta el botón.
+    *   El ESP32 A envía la señal de fin.
+    *   El ESP32 B cierra el archivo, lo sube al servidor y espera la respuesta.
+5.  **Respuesta:**
+    *   El ESP32 B descarga la respuesta y la reproduce por el altavoz.
+
+## Dependencias
+
+*   `WiFi`
+*   `HTTPClient`
+*   `BLEDevice`
+*   `ArduinoJson`
+*   `SD`
+*   `SPI`
+*   `Driver/I2S`
 
 ## API del Backend
 
