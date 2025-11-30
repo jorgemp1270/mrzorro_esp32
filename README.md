@@ -40,6 +40,28 @@ Debido a la latencia de la red, el sistema se divide en dos módulos conectados 
     *   Sube el archivo de audio al servidor Backend.
     *   Descarga la respuesta y la reproduce por el altavoz I2S (MAX98357A).
 
+```mermaid
+graph LR
+    subgraph "Real-Time Audio Node (ESP32-WROOM)"
+        MIC[INMP441 Microphone] -->|I2S Raw Data| WROOM[ESP32-WROOM DSP]
+        style WROOM fill:#f9f,stroke:#333,stroke-width:2px
+    end
+
+    WROOM -->|High-Speed UART Stream TX/RX| WROVER
+
+    subgraph "Storage & Network Node (ESP32-WROVER)"
+        WROVER[ESP32-WROVER Controller] -->|SPI Write Buffer| SD[SD Card Storage]
+        SD -->|Read & Packetize| WROVER
+        style WROVER fill:#9cf,stroke:#333,stroke-width:2px
+    end
+
+    WROVER -->|Async HTTP Upload WiFi| CLOUD[FastAPI Backend]
+
+    style MIC fill:#fff,stroke:#333
+    style SD fill:#fff,stroke:#333
+    style CLOUD fill:#cfc,stroke:#333
+```
+
 ## Requisitos de Hardware
 
 ### ESP32 A (Capturador - NodeMCU-32S)
